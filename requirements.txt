@@ -1,0 +1,33 @@
+# --extra-index-url https://download.pytorch.org/whl/cu124
+
+# # Core AI/ML
+# torch==2.6.0
+# torchvision==0.21.0
+# torchaudio==2.6.0
+
+# Web Interface & Data
+gradio
+pandas
+
+# LangChain & RAG Stack
+langchain
+langchain-chroma
+langchain-huggingface
+langchain-community
+langchain-experimental
+langchain-core
+langchain-ollama
+
+# Vector Database
+chromadb
+
+# Embeddings & Retrieval
+sentence-transformers
+rank_bm25
+
+# Ingestion & Utilities
+aiohttp
+beautifulsoup4
+tqdm
+python-dotenv
+einops
