@@ -13,6 +13,7 @@ from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers.ensemble import EnsembleRetriever
 from langchain_core.documents import Document
+import torch
 
 import config
 from utils import setup_logger, format_docs
@@ -157,7 +158,7 @@ class HDBInfoAgent(BaseAgent):
         deduped = list(unique_docs.values())
         logger.info(f"[HDBInfoAgent] Unique docs after dedup: {len(deduped)}")
         
-        # Rerank against ORIGINAL question
+        # Rerank against original question
         if deduped:
             logger.info("[HDBInfoAgent] Starting reranking...")
             try:
@@ -215,7 +216,7 @@ class MainAgent:
 class RAGPipeline:
     def __init__(self):
         logger.info("Initializing Agentic RAG Pipeline...")
-        self.device = "cuda"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available 
         
         # Shared Resources
         self.vectorstore = self._load_vectorstore()

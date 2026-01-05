@@ -20,8 +20,6 @@ from langchain_core.output_parsers import StrOutputParser
 
 import hashlib
 import json
-
-# Import centralized config and utils
 import config
 from utils import setup_logger
 from ingestion_state import IngestionStateManager
@@ -54,18 +52,18 @@ async def process_images_with_vlm(session: aiohttp.ClientSession, element: Tag, 
         alt = img.get('alt', '').lower()
         class_list = img.get('class', [])
         
-        # 1. Skip SVGs (usually icons)
+        # Skip SVGs (usually icons)
         if src.lower().endswith('.svg'):
             continue
             
-        # 2. Skip common keywords in alt/class/src
+        # Skip common keywords in alt/class/src
         ignore_terms = ['icon', 'logo', 'banner', 'spacer', 'button', 'arrow', '装饰']
         if any(term in src.lower() for term in ignore_terms) or \
            any(term in alt for term in ignore_terms) or \
            any(term in str(c).lower() for term in class_list for c in class_list):
             continue
 
-        # 3. Skip small images based on attributes (if available)
+        # Skip small images based on attributes (if available)
         width = img.get('width')
         height = img.get('height')
         if width and width.isdigit() and int(width) < 100:
@@ -119,9 +117,6 @@ async def process_images_with_vlm(session: aiohttp.ClientSession, element: Tag, 
                                 description_text = f"\n\n> **[Image Description]**: {description}\n\n"
                                 
                                 # Robustly create new tag
-                                # Try to use the element's setup to create a tag
-                                # If element is part of a soup, parents will yield content
-                                # Safest generic way in BS4 without explicit soup ref is:
                                 new_tag = Tag(name="p")
                                 new_tag.string = description_text
                                 
@@ -145,7 +140,6 @@ async def process_images_with_vlm(session: aiohttp.ClientSession, element: Tag, 
 def _use_alt_fallback(img_tag):
     """Helper to replace img with alt text if available."""
     alt = img_tag.get('alt')
-    # original_src = img_tag.get('src', '').split('/')[-1] # Unused variable
     
     # Only keep alt if it looks meaningful (more than 2 words or long enough)
     if alt and len(alt) > 5:
@@ -165,7 +159,6 @@ def html_table_to_markdown(table: Tag) -> str:
         cells = []
         # Handle both th and td
         for cell in tr.find_all(['th', 'td']):
-            # specific check for colspan/rowspan could be complex, keeping it simple for now
             text = cell.get_text(separator=" ", strip=True)
             cells.append(text)
         rows.append(cells)
@@ -217,7 +210,7 @@ def extract_content_with_tables(element: Tag) -> str:
     for script in element(["script", "style", "nav", "footer", "header", "noscript", "iframe", "form"]):
         script.decompose()
     
-    # Convert tables to markdown **in place**
+    # Convert tables to markdown
     for table in element.find_all('table'):
         markdown_table = html_table_to_markdown(table)
         table.replace_with(f"\n{markdown_table}\n")
@@ -253,7 +246,7 @@ async def fetch_url(session: aiohttp.ClientSession, url: str, state_manager: Ing
     """
     logger.info(f"Checking {url}...")
     
-    # 1. Check HTTP Headers (HEAD request)
+    # Check HTTP Headers (HEAD request)
     try:
         async with session.head(url, headers={'User-Agent': config.USER_AGENT}, timeout=5) as resp:
             if resp.status == 200:
@@ -270,7 +263,7 @@ async def fetch_url(session: aiohttp.ClientSession, url: str, state_manager: Ing
     except Exception as e:
         logger.warning(f"HEAD request failed for {url}: {e}")
 
-    # 2. Fetch Content (GET)
+    # Fetch Content
     details_log = {"url": url, "status": "failed", "attempts": 0}
     
     for attempt in range(config.MAX_RETRIES):
@@ -281,19 +274,14 @@ async def fetch_url(session: aiohttp.ClientSession, url: str, state_manager: Ing
                     html = await response.text()
                     
                     # 3. Check Content Hash
-                    # We compute hash of raw HTML to detect any change. 
-                    # (Alternatively, compute hash of extracted text if we only care about meaningful changes)
-                    # Using raw HTML is safer for "synchronization".
+                    # We compute hash of raw HTML to detect any change.
                     content_hash = hashlib.md5(html.encode('utf-8')).hexdigest()
                     
                     if not state_manager.is_modified(url, new_content_hash=content_hash):
                          logger.info(f"Skipping {url} (Content hash unchanged).")
                          return None
 
-                    # If we are here, it is new or modified. Process it.
                     soup = BeautifulSoup(html, 'html.parser')
-                    
-                    # Isolate Main Content
                     content_area = get_main_content(soup)
 
                     # Process Images (Vision-Language) - Modifies content_area in-place
@@ -326,7 +314,6 @@ async def ingest_documents(state_manager: IngestionStateManager):
     
     async with aiohttp.ClientSession() as session:
         tasks = [fetch_url(session, url, state_manager) for url in config.URLS]
-        # Use tqdm for progress bar
         results = await tqdm_asyncio.gather(*tasks, desc="Fetching URLs")
     
     documents = [doc for doc in results if doc is not None]
@@ -371,13 +358,13 @@ def chunk_and_enrich_documents(documents):
         # Create a deterministic ID based on content
         chunk_content_hash = hashlib.md5(chunk.page_content.encode('utf-8')).hexdigest()
         
-        # 1. Check if we've already seen this ID in this batch (internal duplication)
+        #Check if we've already seen this ID in this batch (internal duplication)
         if chunk_content_hash in seen_ids:
             skipped_count += 1
             continue
 
-        chunk.metadata["id"] = chunk_content_hash  # Save ID in metadata for ref
-        chunk.id = chunk_content_hash # Set ID for Chroma kwarg
+        chunk.metadata["id"] = chunk_content_hash 
+        chunk.id = chunk_content_hash
         
         # 2. Check if exists in DB
         # .get(ids=...) returns dict with 'ids' list. If list is empty, ID not found.
@@ -441,7 +428,7 @@ def main():
     parser.add_argument("--clean", action="store_true", help="Wipe the existing vector database before ingestion.")
     args = parser.parse_args()
 
-    # 1. Clean DB if requested
+    # Clean DB if requested
     if args.clean:
         if os.path.exists(config.CHROMA_PATH):
             logger.info(f"Cleaning existing vector store at {config.CHROMA_PATH}...")
@@ -461,23 +448,20 @@ def main():
     # Initialize State Manager
     state_manager = IngestionStateManager(STATE_FILE)
 
-    # 2. Async Ingest
-    # Jupyter/Windows specific policy fix might be needed if running in notebook, 
-    # but this is a script.
+    # Ingest
     documents = asyncio.run(ingest_documents(state_manager))
     
     if not documents:
         logger.info("No documents to ingest.")
         return
 
-    # 3. Chunk & Enrich
+    # Chunk & Enrich
     splits = chunk_and_enrich_documents(documents)
     
     if not splits:
         logger.info("No new chunks to index.")
         return
 
-    # 4. Store in Chroma
     logger.info(f"Ingesting {len(splits)} new chunks into Chroma at {config.CHROMA_PATH}...")
     try:
         embedding_function = HuggingFaceEmbeddings(
